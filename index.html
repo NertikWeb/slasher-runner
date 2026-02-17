@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Slasher Runner: Nertik Edition</title>
+    <style>
+        body { margin: 0; background: #0f0f13; color: white; font-family: 'Segoe UI', Tahoma, sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        canvas { border: 2px solid #333; background: #050505; border-radius: 8px; cursor: pointer; }
+        
+        .ui { position: absolute; top: 20px; text-align: center; pointer-events: none; width: 100%; }
+        .score-box { font-size: 28px; font-weight: bold; text-shadow: 0 0 10px rgba(0, 212, 255, 0.5); }
+        .highscore { font-size: 16px; color: #aaa; margin-top: 5px; }
+        
+        /* Твоя подпись */
+        .author { 
+            position: absolute; 
+            top: 15px; 
+            left: 20px; 
+            font-size: 14px; 
+            color: #555; 
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+        .author span { color: #00d4ff; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="author">Created by <span>Nertik</span></div>
+    
+    <div class="ui">
+        <div class="score-box" id="score">Счет: 0</div>
+        <div class="highscore" id="best">Рекорд: 0</div>
+    </div>
+    <canvas id="game"></canvas>
+
+<script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const bestEl = document.getElementById('best');
+
+    canvas.width = 800;
+    canvas.height = 400;
+
+    let score = 0;
+    let highscore = localStorage.getItem('bestScore') || 0;
+    let gameSpeed = 5;
+    let isGameOver = false;
+    bestEl.innerText = `Рекорд: ${highscore}`;
+
+    const player = {
+        x: 80, y: 300, w: 35, h: 35,
+        dy: 0, jumpForce: 13, gravity: 0.7, grounded: false
+    };
+
+    let enemies = [];
+
+    function spawnEnemy() {
+        if (isGameOver) return;
+        enemies.push({
+            x: canvas.width,
+            y: 345,
+            w: 30 + Math.random() * 25,
+            h: 35,
+            color: `hsl(${Math.random() * 40}, 80%, 50%)` 
+        });
+        let nextSpawn = Math.max(550, 1900 - score * 20);
+        setTimeout(spawnEnemy, nextSpawn);
+    }
+
+    function update() {
+        if (isGameOver) return;
+
+        player.dy += player.gravity;
+        player.y += player.dy;
+
+        if (player.y + player.h > 380) {
+            player.y = 380 - player.h;
+            player.dy = 0;
+            player.grounded = true;
+        } else {
+            player.grounded = false;
+        }
+
+        enemies.forEach((en, index) => {
+            en.x -= gameSpeed + (score / 8);
+
+            if (player.x < en.x + en.w && player.x + player.w > en.x &&
+                player.y < en.y + en.h && player.y + player.h > en.y) {
+                
+                if (player.dy > 0 && player.y + player.h < en.y + 20) {
+                    enemies.splice(index, 1);
+                    score++;
+                    player.dy = -player.jumpForce * 0.85; 
+                    updateScore();
+                } else {
+                    endGame();
+                }
+            }
+            if (en.x + en.w < 0) enemies.splice(index, 1);
+        });
+
+        draw();
+        requestAnimationFrame(update);
+    }
+
+    function updateScore() {
+        scoreEl.innerText = `Счет: ${score}`;
+        if (score > highscore) {
+            highscore = score;
+            localStorage.setItem('bestScore', highscore);
+            bestEl.innerText = `Рекорд: ${highscore}`;
+            bestEl.style.color = '#00ff88';
+        }
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.strokeStyle = '#222';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, 380); ctx.lineTo(canvas.width, 380);
+        ctx.stroke();
+
+        ctx.shadowBlur = 15; ctx.shadowColor = '#00d4ff';
+        ctx.fillStyle = '#00d4ff';
+        ctx.fillRect(player.x, player.y, player.w, player.h);
+
+        ctx.shadowBlur = 10;
+        enemies.forEach(en => {
+            ctx.fillStyle = en.color;
+            ctx.shadowColor = en.color;
+            ctx.fillRect(en.x, en.y, en.w, en.h);
+        });
+        ctx.shadowBlur = 0;
+    }
+
+    function jump() {
+        if (player.grounded) player.dy = -player.jumpForce;
+        if (isGameOver) restart();
+    }
+
+    function endGame() {
+        isGameOver = true;
+        ctx.fillStyle = 'rgba(0,0,0,0.85)';
+        ctx.fillRect(0,0, canvas.width, canvas.height);
+        ctx.fillStyle = 'white';
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 30px sans-serif';
+        ctx.fillText('ИГРА ОКОНЧЕНА', canvas.width/2, canvas.height/2 - 20);
+        ctx.font = '18px sans-serif';
+        ctx.fillStyle = '#aaa';
+        ctx.fillText(`Результат: ${score}`, canvas.width/2, canvas.height/2 + 20);
+        ctx.fillText('Нажми для рестарта', canvas.width/2, canvas.height/2 + 60);
+    }
+
+    function restart() {
+        score = 0;
+        isGameOver = false;
+        enemies = [];
+        player.y = 300;
+        scoreEl.innerText = `Счет: 0`;
+        bestEl.style.color = '#aaa';
+        update();
+        spawnEnemy();
+    }
+
+    window.addEventListener('keydown', e => { if (e.code === 'Space' || e.code === 'ArrowUp') jump(); });
+    canvas.addEventListener('mousedown', jump);
+    canvas.addEventListener('touchstart', (e) => { e.preventDefault(); jump(); });
+
+    spawnEnemy();
+    update();
+</script>
+</body>
+</html>
